@@ -58,7 +58,7 @@ def generate_qr_code(url):
 
 def get_app_url():
     """Get the current app URL - UPDATE WITH YOUR ACTUAL URL"""
-    return "https://drone-lab-inventory.streamlit.app/"
+    return "https://drone-lab-inventory-l8phzdn3dqn38cppfacdtr.streamlit.app/"
 
 def get_storage_icon(storage_type):
     """Get icon for storage type"""
