@@ -1,4 +1,4 @@
-# app.py - PHASE 4: Storage Management System
+# app.py - PHASE 4: Storage Management System (FIXED)
 import streamlit as st
 import qrcode
 import io
@@ -13,19 +13,22 @@ if 'inventory' not in st.session_state:
                 'id': 'storage_1',
                 'name': 'Main Storage',
                 'type': 'shelf',
-                'location': 'Lab Room 101',
-                'description': 'Primary storage for lab equipment',
+                'location': 'Drone Lab AIC',
+                'description': 'Primary storage for drone equipment',
                 'items': [
-                    {'name': 'Sample Item 1', 'quantity': '5 units', 'status': 'Available', 'category': 'Equipment'},
-                    {'name': 'Sample Item 2', 'quantity': '3 units', 'status': 'In Use', 'category': 'Tool'}
+                    {'name': 'DJI Mavic 3', 'quantity': '2 units', 'status': 'Available', 'category': 'Drones'},
+                    {'name': 'LiPo Batteries', 'quantity': '10 units', 'status': 'Available', 'category': 'Batteries'}
                 ],
                 'last_updated': '2024-01-01',
                 'created_date': '2024-01-01'
             }
         },
-        'categories': ['Equipment', 'Tool', 'Electronic', 'Chemical', 'Glassware', 'Other'],
+        'categories': [
+            'Drones', 'Batteries', 'Controllers', 'Propellers', 'Cameras', 
+            'Sensors', 'Chargers', 'Tools', 'Electronics', 'Stationary', 'Other'
+        ],
         'status_options': ['Available', 'In Use', 'Maintenance', 'Broken', 'Reserved'],
-        'storage_types': ['shelf', 'cabinet', 'drawer', 'rack', 'room', 'box', 'other']
+        'storage_types': ['shelf', 'cabinet', 'drawer', 'rack', 'storage_room', 'toolbox', 'other']
     }
 
 # Initialize UI states
@@ -39,6 +42,8 @@ if 'editing_storage' not in st.session_state:
     st.session_state.editing_storage = None
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = 'dashboard'
+if 'delete_confirm' not in st.session_state:
+    st.session_state.delete_confirm = None
 
 def generate_qr_code(url):
     """Generate QR code for a URL"""
@@ -84,12 +89,12 @@ def generate_storage_id():
 def main_dashboard():
     """Main dashboard view"""
     st.set_page_config(
-        page_title="Lab Inventory",
-        page_icon="📦",
+        page_title="Drone Lab Inventory",
+        page_icon="🚁",
         layout="wide"
     )
     
-    st.title("📦 Lab Inventory System")
+    st.title("🚁 Drone Lab AIC - Inventory System")
     st.markdown("### 🚀 PHASE 4 ACTIVE - STORAGE MANAGEMENT")
     st.markdown("---")
     
@@ -141,7 +146,7 @@ def main_dashboard():
     st.subheader("📊 Storage Management")
     
     if not st.session_state.inventory['storages']:
-        st.info("No storage units yet. Click 'Add Storage' to create your first one!")
+        st.info("🚁 No storage units yet. Click 'Add Storage' to create your first one!")
     else:
         for storage_id, storage in st.session_state.inventory['storages'].items():
             show_storage_with_management(storage_id, storage, app_url)
@@ -151,7 +156,7 @@ def main_dashboard():
 
 def all_items_view():
     """View all items across all storages"""
-    st.title("📋 All Items")
+    st.title("📋 All Drone Lab Items")
     
     # Back button
     if st.button("← Back to Dashboard"):
@@ -171,7 +176,7 @@ def all_items_view():
             })
     
     if not all_items:
-        st.info("No items found in any storage.")
+        st.info("📭 No items found in any storage.")
         return
     
     # Display all items
@@ -195,12 +200,15 @@ def all_items_view():
         
         with col5:
             if st.button("✏️ Edit", key=f"edit_all_{i}"):
-                st.session_state.editing_item = (item['storage_id'], 
-                                               st.session_state.inventory['storages'][item['storage_id']]['items'].index(
-                                                   next(it for it in st.session_state.inventory['storages'][item['storage_id']]['items'] 
-                                                        if it['name'] == item['name'] and it['quantity'] == item['quantity'])
-                                               ))
-                st.rerun()
+                # Find the exact item index
+                storage_items = st.session_state.inventory['storages'][item['storage_id']]['items']
+                for idx, storage_item in enumerate(storage_items):
+                    if (storage_item['name'] == item['name'] and 
+                        storage_item['quantity'] == item['quantity'] and 
+                        storage_item.get('category', 'Other') == item.get('category', 'Other')):
+                        st.session_state.editing_item = (item['storage_id'], idx)
+                        st.rerun()
+                        break
 
 def show_storage_with_management(storage_id, storage, app_url):
     """Show storage with full management options"""
@@ -246,7 +254,7 @@ def show_storage_with_management(storage_id, storage, app_url):
                             delete_item(storage_id, i)
                             st.rerun()
             else:
-                st.info("No items in this storage")
+                st.info("📭 No items in this storage")
             
             # Add item button
             if st.button("➕ Add New Item", key=f"add_{storage_id}", use_container_width=True):
@@ -288,8 +296,8 @@ def add_storage_view():
     st.markdown("---")
     
     with st.form("add_storage_form"):
-        name = st.text_input("Storage Name*", placeholder="e.g., Electronics Cabinet, Chemical Shelf")
-        location = st.text_input("Location*", placeholder="e.g., Lab Room 101, Building A")
+        name = st.text_input("Storage Name*", placeholder="e.g., Drone Cabinet, Battery Shelf")
+        location = st.text_input("Location*", value="Drone Lab AIC")
         storage_type = st.selectbox("Storage Type*", st.session_state.inventory['storage_types'])
         description = st.text_area("Description", placeholder="Optional description of this storage unit")
         
@@ -361,10 +369,23 @@ def edit_storage_view():
         st.subheader("Danger Zone")
         st.warning("This action cannot be undone!")
         
-        if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True):
-            delete_storage(storage_id)
-            st.session_state.editing_storage = None
-            st.rerun()
+        if st.session_state.delete_confirm == storage_id:
+            st.error(f"Are you sure you want to delete '{storage['name']}' and all its items?")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Yes, Delete", type="primary", use_container_width=True):
+                    delete_storage(storage_id)
+                    st.session_state.delete_confirm = None
+                    st.session_state.editing_storage = None
+                    st.rerun()
+            with col2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.delete_confirm = None
+                    st.rerun()
+        else:
+            if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True):
+                st.session_state.delete_confirm = storage_id
+                st.rerun()
 
 def add_item_view(storage_id):
     """View for adding a new item"""
@@ -380,8 +401,8 @@ def add_item_view(storage_id):
     st.markdown("---")
     
     with st.form(f"add_item_form_{storage_id}"):
-        name = st.text_input("Item Name*", placeholder="Enter item name")
-        quantity = st.text_input("Quantity*", placeholder="e.g., 5 units, 200ml")
+        name = st.text_input("Item Name*", placeholder="e.g., DJI Mavic 3, LiPo Battery")
+        quantity = st.text_input("Quantity*", placeholder="e.g., 2 units, 5 packs")
         category = st.selectbox("Category", st.session_state.inventory['categories'])
         status = st.selectbox("Status", st.session_state.inventory['status_options'])
         
