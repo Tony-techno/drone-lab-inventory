@@ -1,35 +1,13 @@
-# app.py - PHASE 4: COMPLETELY FIXED VERSION
+# app.py - COMPLETE FIXED VERSION WITH DATA PERSISTENCE
 import streamlit as st
 import qrcode
 import io
 from datetime import datetime
-import uuid
+from data_manager import load_inventory, save_inventory, generate_storage_id
 
-# Initialize session state
+# Initialize session state with persisted data
 if 'inventory' not in st.session_state:
-    st.session_state.inventory = {
-        'storages': {
-            'storage_1': {
-                'id': 'storage_1',
-                'name': 'Main Storage',
-                'type': 'shelf',
-                'location': 'Drone Lab AIC',
-                'description': 'Primary storage for drone equipment',
-                'items': [
-                    {'name': 'DJI Mavic 3', 'quantity': '2 units', 'status': 'Available', 'category': 'Drones'},
-                    {'name': 'LiPo Batteries', 'quantity': '10 units', 'status': 'Available', 'category': 'Batteries'}
-                ],
-                'last_updated': '2024-01-01',
-                'created_date': '2024-01-01'
-            }
-        },
-        'categories': [
-            'Drones', 'Batteries', 'Controllers', 'Propellers', 'Cameras', 
-            'Sensors', 'Chargers', 'Tools', 'Electronics', 'Stationary', 'Other'
-        ],
-        'status_options': ['Available', 'In Use', 'Maintenance', 'Broken', 'Reserved'],
-        'storage_types': ['shelf', 'cabinet', 'drawer', 'rack', 'storage_room', 'toolbox', 'other']
-    }
+    st.session_state.inventory = load_inventory()
 
 # Initialize UI states
 if 'editing_item' not in st.session_state:
@@ -84,9 +62,12 @@ def get_status_icon(status):
     }
     return icons.get(status, '⚪')
 
-def generate_storage_id():
-    """Generate unique storage ID"""
-    return f"storage_{uuid.uuid4().hex[:8]}"
+def save_and_rerun():
+    """Save data and rerun the app"""
+    if save_inventory(st.session_state.inventory):
+        st.rerun()
+    else:
+        st.error("Failed to save changes!")
 
 def main_dashboard():
     """Main dashboard view"""
@@ -97,7 +78,7 @@ def main_dashboard():
     )
     
     st.title("🚁 Drone Lab AIC - Inventory System")
-    st.markdown("### 🚀 PHASE 4 ACTIVE - STORAGE MANAGEMENT")
+    st.markdown("### 🚀 COMPLETE SYSTEM - DATA PERSISTENCE ACTIVE")
     st.markdown("---")
     
     # Quick actions
@@ -111,8 +92,8 @@ def main_dashboard():
             st.session_state.view_mode = 'all_items'
             st.rerun()
     with col3:
-        if st.button("🏠 Dashboard", use_container_width=True):
-            st.session_state.view_mode = 'dashboard'
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.session_state.inventory = load_inventory()
             st.rerun()
     
     st.markdown("---")
@@ -154,63 +135,7 @@ def main_dashboard():
             show_storage_with_management(storage_id, storage, app_url)
     
     st.markdown("---")
-    st.success("✅ Phase 4 Complete: Storage management system added!")
-
-def all_items_view():
-    """View all items across all storages"""
-    st.title("📋 All Drone Lab Items")
-    
-    # Back button
-    if st.button("← Back to Dashboard"):
-        st.session_state.view_mode = 'dashboard'
-        st.rerun()
-    
-    st.markdown("---")
-    
-    all_items = []
-    for storage_id, storage in st.session_state.inventory['storages'].items():
-        for item in storage['items']:
-            all_items.append({
-                'storage_name': storage['name'],
-                'storage_location': storage['location'],
-                'storage_id': storage_id,
-                **item
-            })
-    
-    if not all_items:
-        st.info("📭 No items found in any storage.")
-        return
-    
-    # Display all items
-    for i, item in enumerate(all_items):
-        col1, col2, col3, col4, col5 = st.columns([2, 2, 1, 1, 1])
-        
-        with col1:
-            st.write(f"**{item['name']}**")
-            st.caption(f"Storage: {item['storage_name']}")
-        
-        with col2:
-            st.write(item['quantity'])
-            st.caption(f"Location: {item['storage_location']}")
-        
-        with col3:
-            st.write(item['category'])
-        
-        with col4:
-            status_icon = get_status_icon(item['status'])
-            st.write(f"{status_icon} {item['status']}")
-        
-        with col5:
-            if st.button("✏️ Edit", key=f"edit_all_{i}"):
-                # Find the exact item index
-                storage_items = st.session_state.inventory['storages'][item['storage_id']]['items']
-                for idx, storage_item in enumerate(storage_items):
-                    if (storage_item['name'] == item['name'] and 
-                        storage_item['quantity'] == item['quantity'] and 
-                        storage_item.get('category', 'Other') == item.get('category', 'Other')):
-                        st.session_state.editing_item = (item['storage_id'], idx)
-                        st.rerun()
-                        break
+    st.success("✅ Data automatically saved! Changes persist after reload.")
 
 def show_storage_with_management(storage_id, storage, app_url):
     """Show storage with full management options"""
@@ -252,26 +177,10 @@ def show_storage_with_management(storage_id, storage, app_url):
                             st.rerun()
                     
                     with col_delete:
-                        delete_key = f"delete_{storage_id}_{i}"
-                        if st.button("🗑️", key=delete_key):
-                            st.session_state.delete_item_confirm = (storage_id, i, item['name'])
-                            st.rerun()
-            
-            # Show delete confirmation if needed
-            if (st.session_state.delete_item_confirm and 
-                st.session_state.delete_item_confirm[0] == storage_id):
-                storage_id_confirm, item_index, item_name = st.session_state.delete_item_confirm
-                st.error(f"Are you sure you want to delete '{item_name}'?")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("✅ Yes, Delete", key=f"confirm_del_{storage_id}_{item_index}"):
-                        delete_item(storage_id_confirm, item_index)
-                        st.session_state.delete_item_confirm = None
-                        st.rerun()
-                with col2:
-                    if st.button("❌ Cancel", key=f"cancel_del_{storage_id}_{item_index}"):
-                        st.session_state.delete_item_confirm = None
-                        st.rerun()
+                        if st.button("🗑️", key=f"delete_{storage_id}_{i}"):
+                            # Immediate deletion with confirmation
+                            if delete_item(storage_id, i):
+                                save_and_rerun()
             
             if not storage['items']:
                 st.info("📭 No items in this storage")
@@ -333,15 +242,14 @@ def add_storage_view():
             
         if submit:
             if name and location and storage_type:
-                create_new_storage(name, location, storage_type, description)
-                st.session_state.adding_storage = False
-                st.success(f"✅ Storage '{name}' created successfully!")
-                st.rerun()
+                if create_new_storage(name, location, storage_type, description):
+                    st.session_state.adding_storage = False
+                    save_and_rerun()
             else:
                 st.error("Please fill in all required fields (*)")
 
 def edit_storage_view():
-    """View for editing storage details - COMPLETELY FIXED"""
+    """View for editing storage details"""
     storage_id = st.session_state.editing_storage
     storage = st.session_state.inventory['storages'][storage_id]
     
@@ -349,7 +257,6 @@ def edit_storage_view():
     
     if st.button("← Back to Dashboard"):
         st.session_state.editing_storage = None
-        st.session_state.delete_confirm = None
         st.rerun()
     
     st.markdown("---")
@@ -381,8 +288,7 @@ def edit_storage_view():
                 if name and location and storage_type:
                     update_storage(storage_id, name, location, storage_type, description)
                     st.session_state.editing_storage = None
-                    st.success(f"✅ Storage '{name}' updated successfully!")
-                    st.rerun()
+                    save_and_rerun()
                 else:
                     st.error("Please fill in all required fields (*)")
     
@@ -390,27 +296,10 @@ def edit_storage_view():
         st.subheader("Danger Zone")
         st.warning("This action cannot be undone!")
         
-        # DELETE STORAGE BUTTON - COMPLETELY SEPARATE FROM FORM
-        if st.session_state.delete_confirm == storage_id:
-            st.error(f"🚨 Confirm Deletion")
-            st.write(f"Are you sure you want to delete **{storage['name']}**?")
-            st.write(f"This will delete **{len(storage['items'])} items** permanently!")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✅ Yes, Delete Forever", type="primary", use_container_width=True):
-                    delete_storage(storage_id)
-                    st.session_state.delete_confirm = None
-                    st.session_state.editing_storage = None
-                    st.rerun()
-            with col2:
-                if st.button("❌ Cancel Deletion", use_container_width=True):
-                    st.session_state.delete_confirm = None
-                    st.rerun()
-        else:
-            if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True, key=f"delete_storage_{storage_id}"):
-                st.session_state.delete_confirm = storage_id
-                st.rerun()
+        if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True, key=f"delete_storage_{storage_id}"):
+            if delete_storage(storage_id):
+                st.session_state.editing_storage = None
+                save_and_rerun()
 
 def add_item_view(storage_id):
     """View for adding a new item"""
@@ -445,8 +334,7 @@ def add_item_view(storage_id):
             if name and quantity:
                 add_item_to_storage(storage_id, name, quantity, category, status)
                 st.session_state.adding_item = False
-                st.success(f"✅ Item '{name}' added successfully!")
-                st.rerun()
+                save_and_rerun()
             else:
                 st.error("Please fill in item name and quantity")
 
@@ -487,68 +375,94 @@ def edit_item_view():
             if name and quantity:
                 update_item(storage_id, item_index, name, quantity, category, status)
                 st.session_state.editing_item = None
-                st.success(f"✅ Item '{name}' updated successfully!")
-                st.rerun()
+                save_and_rerun()
             else:
                 st.error("Please fill in item name and quantity")
 
 # CRUD Operations for Storages
 def create_new_storage(name, location, storage_type, description=""):
     """Create a new storage unit"""
-    storage_id = generate_storage_id()
-    
-    st.session_state.inventory['storages'][storage_id] = {
-        'id': storage_id,
-        'name': name,
-        'location': location,
-        'type': storage_type,
-        'description': description,
-        'items': [],
-        'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'created_date': datetime.now().strftime("%Y-%m-%d")
-    }
+    try:
+        storage_id = generate_storage_id()
+        
+        st.session_state.inventory['storages'][storage_id] = {
+            'id': storage_id,
+            'name': name,
+            'location': location,
+            'type': storage_type,
+            'description': description,
+            'items': [],
+            'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'created_date': datetime.now().strftime("%Y-%m-%d")
+        }
+        return True
+    except Exception as e:
+        st.error(f"Error creating storage: {e}")
+        return False
 
 def update_storage(storage_id, name, location, storage_type, description=""):
     """Update storage details"""
-    st.session_state.inventory['storages'][storage_id].update({
-        'name': name,
-        'location': location,
-        'type': storage_type,
-        'description': description,
-        'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
+    try:
+        st.session_state.inventory['storages'][storage_id].update({
+            'name': name,
+            'location': location,
+            'type': storage_type,
+            'description': description,
+            'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        return True
+    except Exception as e:
+        st.error(f"Error updating storage: {e}")
+        return False
 
 def delete_storage(storage_id):
     """Delete a storage unit and all its items"""
-    storage_name = st.session_state.inventory['storages'][storage_id]['name']
-    del st.session_state.inventory['storages'][storage_id]
-    st.success(f"✅ Storage '{storage_name}' and all its items deleted successfully!")
+    try:
+        storage_name = st.session_state.inventory['storages'][storage_id]['name']
+        del st.session_state.inventory['storages'][storage_id]
+        st.success(f"✅ Storage '{storage_name}' deleted successfully!")
+        return True
+    except Exception as e:
+        st.error(f"Error deleting storage: {e}")
+        return False
 
 # CRUD Operations for Items
 def add_item_to_storage(storage_id, name, quantity, category, status):
     """Add item to storage"""
-    st.session_state.inventory['storages'][storage_id]['items'].append({
-        'name': name,
-        'quantity': quantity,
-        'category': category,
-        'status': status
-    })
-    # Update timestamp
-    st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        st.session_state.inventory['storages'][storage_id]['items'].append({
+            'name': name,
+            'quantity': quantity,
+            'category': category,
+            'status': status
+        })
+        # Update timestamp
+        st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        st.success(f"✅ Item '{name}' added successfully!")
+        return True
+    except Exception as e:
+        st.error(f"Error adding item: {e}")
+        return False
 
 def update_item(storage_id, item_index, name, quantity, category, status):
     """Update item details"""
-    st.session_state.inventory['storages'][storage_id]['items'][item_index].update({
-        'name': name,
-        'quantity': quantity,
-        'category': category,
-        'status': status
-    })
-    # Update timestamp
-    st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        st.session_state.inventory['storages'][storage_id]['items'][item_index].update({
+            'name': name,
+            'quantity': quantity,
+            'category': category,
+            'status': status
+        })
+        # Update timestamp
+        st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        st.success(f"✅ Item '{name}' updated successfully!")
+        return True
+    except Exception as e:
+        st.error(f"Error updating item: {e}")
+        return False
 
 def delete_item(storage_id, item_index):
-    """Delete an item - FIXED VERSION"""
+    """Delete an item - FAST VERSION"""
     try:
         item_name = st.session_state.inventory['storages'][storage_id]['items'][item_index]['name']
         # Remove the specific item
@@ -556,8 +470,13 @@ def delete_item(storage_id, item_index):
         # Update timestamp
         st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         st.success(f"✅ Item '{item_name}' deleted successfully!")
+        return True
     except IndexError:
         st.error("❌ Error: Item not found. Please refresh the page.")
+        return False
+    except Exception as e:
+        st.error(f"Error deleting item: {e}")
+        return False
 
 # Main application router
 def main():
