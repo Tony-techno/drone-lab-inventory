@@ -1,4 +1,4 @@
-# app.py - PHASE 4: Storage Management System (FIXED)
+# app.py - PHASE 4: COMPLETELY FIXED VERSION
 import streamlit as st
 import qrcode
 import io
@@ -44,6 +44,8 @@ if 'view_mode' not in st.session_state:
     st.session_state.view_mode = 'dashboard'
 if 'delete_confirm' not in st.session_state:
     st.session_state.delete_confirm = None
+if 'delete_item_confirm' not in st.session_state:
+    st.session_state.delete_item_confirm = None
 
 def generate_qr_code(url):
     """Generate QR code for a URL"""
@@ -250,10 +252,28 @@ def show_storage_with_management(storage_id, storage, app_url):
                             st.rerun()
                     
                     with col_delete:
-                        if st.button("🗑️", key=f"delete_{storage_id}_{i}"):
-                            delete_item(storage_id, i)
+                        delete_key = f"delete_{storage_id}_{i}"
+                        if st.button("🗑️", key=delete_key):
+                            st.session_state.delete_item_confirm = (storage_id, i, item['name'])
                             st.rerun()
-            else:
+            
+            # Show delete confirmation if needed
+            if (st.session_state.delete_item_confirm and 
+                st.session_state.delete_item_confirm[0] == storage_id):
+                storage_id_confirm, item_index, item_name = st.session_state.delete_item_confirm
+                st.error(f"Are you sure you want to delete '{item_name}'?")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Yes, Delete", key=f"confirm_del_{storage_id}_{item_index}"):
+                        delete_item(storage_id_confirm, item_index)
+                        st.session_state.delete_item_confirm = None
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Cancel", key=f"cancel_del_{storage_id}_{item_index}"):
+                        st.session_state.delete_item_confirm = None
+                        st.rerun()
+            
+            if not storage['items']:
                 st.info("📭 No items in this storage")
             
             # Add item button
@@ -321,7 +341,7 @@ def add_storage_view():
                 st.error("Please fill in all required fields (*)")
 
 def edit_storage_view():
-    """View for editing storage details"""
+    """View for editing storage details - COMPLETELY FIXED"""
     storage_id = st.session_state.editing_storage
     storage = st.session_state.inventory['storages'][storage_id]
     
@@ -329,6 +349,7 @@ def edit_storage_view():
     
     if st.button("← Back to Dashboard"):
         st.session_state.editing_storage = None
+        st.session_state.delete_confirm = None
         st.rerun()
     
     st.markdown("---")
@@ -369,21 +390,25 @@ def edit_storage_view():
         st.subheader("Danger Zone")
         st.warning("This action cannot be undone!")
         
+        # DELETE STORAGE BUTTON - COMPLETELY SEPARATE FROM FORM
         if st.session_state.delete_confirm == storage_id:
-            st.error(f"Are you sure you want to delete '{storage['name']}' and all its items?")
+            st.error(f"🚨 Confirm Deletion")
+            st.write(f"Are you sure you want to delete **{storage['name']}**?")
+            st.write(f"This will delete **{len(storage['items'])} items** permanently!")
+            
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✅ Yes, Delete", type="primary", use_container_width=True):
+                if st.button("✅ Yes, Delete Forever", type="primary", use_container_width=True):
                     delete_storage(storage_id)
                     st.session_state.delete_confirm = None
                     st.session_state.editing_storage = None
                     st.rerun()
             with col2:
-                if st.button("❌ Cancel", use_container_width=True):
+                if st.button("❌ Cancel Deletion", use_container_width=True):
                     st.session_state.delete_confirm = None
                     st.rerun()
         else:
-            if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True):
+            if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True, key=f"delete_storage_{storage_id}"):
                 st.session_state.delete_confirm = storage_id
                 st.rerun()
 
@@ -523,12 +548,16 @@ def update_item(storage_id, item_index, name, quantity, category, status):
     st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def delete_item(storage_id, item_index):
-    """Delete an item"""
-    item_name = st.session_state.inventory['storages'][storage_id]['items'][item_index]['name']
-    del st.session_state.inventory['storages'][storage_id]['items'][item_index]
-    # Update timestamp
-    st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    st.success(f"✅ Item '{item_name}' deleted successfully!")
+    """Delete an item - FIXED VERSION"""
+    try:
+        item_name = st.session_state.inventory['storages'][storage_id]['items'][item_index]['name']
+        # Remove the specific item
+        del st.session_state.inventory['storages'][storage_id]['items'][item_index]
+        # Update timestamp
+        st.session_state.inventory['storages'][storage_id]['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        st.success(f"✅ Item '{item_name}' deleted successfully!")
+    except IndexError:
+        st.error("❌ Error: Item not found. Please refresh the page.")
 
 # Main application router
 def main():
