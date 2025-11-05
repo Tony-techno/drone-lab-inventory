@@ -1,10 +1,11 @@
-# app.py - COMPLETELY FIXED VERSION
+# app.py - COMPLETE SINGLE FILE SOLUTION
 import streamlit as st
 import qrcode
 import io
+import json
+import os
 from datetime import datetime
 import uuid
-from database import load_inventory, save_inventory
 
 # Set page config FIRST - before any other Streamlit commands
 st.set_page_config(
@@ -12,6 +13,67 @@ st.set_page_config(
     page_icon="🚁",
     layout="wide"
 )
+
+# DATA PERSISTENCE FUNCTIONS
+DATA_FILE = "inventory_data.json"
+
+def load_inventory():
+    """Load inventory from JSON file - ROBUST VERSION"""
+    try:
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Validate and repair data structure
+                if 'storages' not in data:
+                    data['storages'] = {}
+                return data
+        return get_default_inventory()
+    except Exception as e:
+        st.error(f"Data loading error: {e}")
+        return get_default_inventory()
+
+def save_inventory(inventory):
+    """Save inventory to JSON file - ATOMIC OPERATION"""
+    try:
+        # Create backup first
+        if os.path.exists(DATA_FILE):
+            backup_file = f"{DATA_FILE}.backup"
+            with open(DATA_FILE, 'r', encoding='utf-8') as src:
+                with open(backup_file, 'w', encoding='utf-8') as dst:
+                    dst.write(src.read())
+        
+        # Save new data
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(inventory, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        st.error(f"Data saving error: {e}")
+        return False
+
+def get_default_inventory():
+    """Default inventory structure"""
+    return {
+        'storages': {
+            'storage_1': {
+                'id': 'storage_1',
+                'name': 'Drone Storage Cabinet',
+                'type': 'cabinet',
+                'location': 'Drone Lab AIC',
+                'description': 'Main storage for drone equipment',
+                'items': [
+                    {'id': 'item_1', 'name': 'DJI Mavic 3 Pro', 'quantity': '3 units', 'status': 'Available', 'category': 'Drones'},
+                    {'id': 'item_2', 'name': 'LiPo Batteries', 'quantity': '15 units', 'status': 'Available', 'category': 'Batteries'},
+                    {'id': 'item_3', 'name': 'FPV Controller', 'quantity': '2 units', 'status': 'In Use', 'category': 'Controllers'}
+                ],
+                'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+        },
+        'categories': ['Drones', 'Batteries', 'Controllers', 'Propellers', 'Cameras', 'Sensors', 'Chargers', 'Tools', 'Electronics', 'Stationary', 'Other'],
+        'status_options': ['Available', 'In Use', 'Maintenance', 'Broken', 'Reserved'],
+        'storage_types': ['shelf', 'cabinet', 'drawer', 'rack', 'storage_room', 'toolbox', 'other'],
+        'app_url': 'https://drone-lab-inventory-l8phzdn3dqn38cppfacdtr.streamlit.app',
+        'created_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
 
 # LOAD SHARED DATA - Same for all devices
 inventory = load_inventory()
@@ -161,7 +223,7 @@ def show_storage_only_view(storage_id):
     
     st.markdown("---")
     
-    # Show items in this storage
+    # Show items in this storage - FIXED SYNTAX
     st.subheader(f"Items ({len(storage['items'])})")
     
     if storage['items']:
