@@ -162,7 +162,7 @@ def show_storage_only_view(storage_id):
     st.markdown("---")
     
     # Show items in this storage
-    st.subheader(f"Items ({len(storage['items']})")
+    st.subheader(f"Items ({len(storage['items'])})")
     
     if storage['items']:
         for item in storage['items']:
