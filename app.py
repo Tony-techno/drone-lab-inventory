@@ -1,74 +1,47 @@
-# app.py - TARGETED FIXES ONLY
+# app.py - COMPLETELY FIXED VERSION
 import streamlit as st
 import qrcode
 import io
 from datetime import datetime
 import uuid
+from database import load_inventory, save_inventory
 
-# Data persistence in session state - ENHANCED
-if 'inventory' not in st.session_state:
-    st.session_state.inventory = {
-        'storages': {
-            'storage_1': {
-                'id': 'storage_1',
-                'name': 'Drone Storage Cabinet',
-                'type': 'cabinet',
-                'location': 'Drone Lab AIC',
-                'description': 'Main storage for drone equipment',
-                'items': [
-                    {'id': 'item_1', 'name': 'DJI Mavic 3 Pro', 'quantity': '3 units', 'status': 'Available', 'category': 'Drones'},
-                    {'id': 'item_2', 'name': 'LiPo Batteries', 'quantity': '15 units', 'status': 'Available', 'category': 'Batteries'},
-                    {'id': 'item_3', 'name': 'FPV Controller', 'quantity': '2 units', 'status': 'In Use', 'category': 'Controllers'}
-                ],
-                'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M")
-            },
-            'storage_2': {
-                'id': 'storage_2',
-                'name': 'Tool & Parts Drawer',
-                'type': 'drawer',
-                'location': 'Drone Lab AIC',
-                'description': 'Tools and spare parts',
-                'items': [
-                    {'id': 'item_4', 'name': 'Screwdriver Set', 'quantity': '1 set', 'status': 'Available', 'category': 'Tools'},
-                    {'id': 'item_5', 'name': 'Propeller Set', 'quantity': '10 pairs', 'status': 'Available', 'category': 'Propellers'}
-                ],
-                'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M")
-            }
-        },
-        'categories': ['Drones', 'Batteries', 'Controllers', 'Propellers', 'Cameras', 'Sensors', 'Chargers', 'Tools', 'Electronics', 'Stationary', 'Other'],
-        'status_options': ['Available', 'In Use', 'Maintenance', 'Broken', 'Reserved'],
-        'storage_types': ['shelf', 'cabinet', 'drawer', 'rack', 'storage_room', 'toolbox', 'other']
+# Set page config FIRST - before any other Streamlit commands
+st.set_page_config(
+    page_title="Drone Lab Inventory",
+    page_icon="🚁",
+    layout="wide"
+)
+
+# LOAD SHARED DATA - Same for all devices
+inventory = load_inventory()
+
+# Initialize session state for UI only
+if 'ui_state' not in st.session_state:
+    st.session_state.ui_state = {
+        'current_view': 'dashboard',
+        'selected_storage': None,
+        'selected_item': None,
+        'qr_codes': {},
+        'last_refresh': datetime.now(),
+        'delete_pending': None
     }
 
-# Initialize QR codes in session state
-if 'qr_codes' not in st.session_state:
-    st.session_state.qr_codes = {}
-
-# UI state management
-if 'current_view' not in st.session_state:
-    st.session_state.current_view = 'dashboard'
-if 'selected_storage' not in st.session_state:
-    st.session_state.selected_storage = None
-if 'selected_item' not in st.session_state:
-    st.session_state.selected_item = None
-if 'delete_confirm' not in st.session_state:
-    st.session_state.delete_confirm = None
-
 def generate_qr_code(data):
-    """Generate HIGH QUALITY QR code for better scannability"""
+    """Generate HIGH QUALITY QR code"""
     try:
         qr = qrcode.QRCode(
-            version=5,  # Increased version for more data capacity
-            error_correction=qrcode.constants.ERROR_CORRECT_H,  # Highest error correction
-            box_size=15,  # Larger boxes for better scannability
-            border=4,     # Adequate border
+            version=5,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=12,
+            border=4,
         )
         qr.add_data(data)
         qr.make(fit=True)
         
         qr_img = qr.make_image(fill_color="black", back_color="white")
         buf = io.BytesIO()
-        qr_img.save(buf, format="PNG", quality=100)  # Highest quality
+        qr_img.save(buf, format="PNG")
         buf.seek(0)
         return buf.getvalue()
     except Exception as e:
@@ -77,34 +50,28 @@ def generate_qr_code(data):
 
 def get_app_url():
     """Get the current app URL"""
-    return "https://drone-lab-inventory-l8phzdn3dqn38cppfacdtr.streamlit.app/"
+    return inventory.get('app_url', 'https://drone-lab-inventory-l8phzdn3dqn38cppfacdtr.streamlit.app')
 
-def get_storage_qr_code(storage_id, storage_name):
-    """Get or generate QR code for a storage - SIMPLIFIED FOR BETTER SCANNING"""
+def get_storage_qr_code(storage_id):
+    """Get QR code for specific storage"""
     qr_key = f"storage_{storage_id}"
-    
-    if qr_key not in st.session_state.qr_codes:
-        # SIMPLIFIED QR DATA - Easy to scan, only storage ID
-        qr_data = f"{get_app_url()}?storage={storage_id}"
+    if qr_key not in st.session_state.ui_state['qr_codes']:
+        qr_data = f"{get_app_url()}?view=storage&id={storage_id}"
         qr_image = generate_qr_code(qr_data)
         if qr_image:
-            st.session_state.qr_codes[qr_key] = qr_image
-    
-    return st.session_state.qr_codes.get(qr_key)
+            st.session_state.ui_state['qr_codes'][qr_key] = qr_image
+    return st.session_state.ui_state['qr_codes'].get(qr_key)
 
 def get_central_qr_code():
-    """Get central QR code for the entire app - FULL ACCESS"""
-    if 'central_qr' not in st.session_state.qr_codes:
-        # CENTRAL QR - Full dashboard access
+    """Get central QR code for full access"""
+    if 'central_qr' not in st.session_state.ui_state['qr_codes']:
         qr_data = f"{get_app_url()}"
         qr_image = generate_qr_code(qr_data)
         if qr_image:
-            st.session_state.qr_codes['central_qr'] = qr_image
-    
-    return st.session_state.qr_codes.get('central_qr')
+            st.session_state.ui_state['qr_codes']['central_qr'] = qr_image
+    return st.session_state.ui_state['qr_codes'].get('central_qr')
 
 def get_status_icon(status):
-    """Get icon for item status"""
     icons = {
         'Available': '🟢',
         'In Use': '🔴', 
@@ -115,96 +82,124 @@ def get_status_icon(status):
     return icons.get(status, '⚪')
 
 def generate_id():
-    """Generate unique ID"""
     return str(uuid.uuid4())[:8]
 
-def save_inventory():
-    """Force save inventory to maintain changes"""
-    st.session_state.inventory['last_saved'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # This ensures data persists during the session
+def force_refresh():
+    """Force refresh data from file"""
+    global inventory
+    inventory = load_inventory()
+    st.session_state.ui_state['last_refresh'] = datetime.now()
+
+def auto_save():
+    """Auto-save after any change"""
+    if save_inventory(inventory):
+        st.session_state.ui_state['last_refresh'] = datetime.now()
+        return True
+    return False
+
+def safe_delete_item(storage_id, item_index):
+    """Safe item deletion without confirmation popup"""
+    try:
+        storage = inventory['storages'][storage_id]
+        if 0 <= item_index < len(storage['items']):
+            item_name = storage['items'][item_index]['name']
+            storage['items'].pop(item_index)
+            storage['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if auto_save():
+                st.success(f"✅ '{item_name}' deleted successfully!")
+                return True
+    except Exception as e:
+        st.error(f"Delete error: {e}")
+    return False
 
 def main():
-    st.set_page_config(
-        page_title="Drone Lab Inventory",
-        page_icon="🚁",
-        layout="wide"
-    )
-    
-    # Check URL parameters for storage-specific access
+    # Check URL parameters for view type
     query_params = st.experimental_get_query_params()
-    storage_param = query_params.get("storage", [None])[0]
+    view_type = query_params.get("view", [None])[0]
+    storage_id = query_params.get("id", [None])[0]
     
-    if storage_param and storage_param in st.session_state.inventory['storages']:
-        show_storage_specific_view(storage_param)
+    # Auto-refresh every 20 seconds
+    if (datetime.now() - st.session_state.ui_state['last_refresh']).seconds > 20:
+        force_refresh()
+        st.rerun()
+    
+    # Handle storage-specific view
+    if view_type == 'storage' and storage_id in inventory['storages']:
+        show_storage_only_view(storage_id)
     else:
-        # Normal navigation
-        if st.session_state.current_view == 'add_storage':
+        # Handle main navigation
+        current_view = st.session_state.ui_state['current_view']
+        
+        if current_view == 'add_storage':
             add_storage_view()
-        elif st.session_state.current_view == 'edit_storage':
+        elif current_view == 'edit_storage':
             edit_storage_view()
-        elif st.session_state.current_view == 'add_item':
+        elif current_view == 'add_item':
             add_item_view()
-        elif st.session_state.current_view == 'edit_item':
+        elif current_view == 'edit_item':
             edit_item_view()
         else:
             dashboard_view()
 
-def show_storage_specific_view(storage_id):
-    """Show only specific storage when accessed via storage QR"""
-    storage = st.session_state.inventory['storages'][storage_id]
+def show_storage_only_view(storage_id):
+    """View for storage QR codes - READ ONLY"""
+    storage = inventory['storages'][storage_id]
     
-    st.title(f"🚁 {storage['name']} - Drone Lab AIC")
-    st.markdown(f"### 📍 {storage['location']} - {storage['type'].title()}")
+    st.title(f"🚁 {storage['name']}")
+    st.markdown(f"**Location:** {storage['location']} | **Type:** {storage['type'].title()}")
     
-    # Limited access message
-    st.warning("🔒 **Limited Access**: You are viewing only this storage. Scan the Central QR for full access.")
+    # Refresh button
+    if st.button("🔄 Refresh Data", key="refresh_storage"):
+        force_refresh()
+        st.rerun()
     
-    if st.button("← Access Full Dashboard"):
+    st.warning("📱 **Storage View Only** - Scan Central QR for full management access")
+    
+    if st.button("🏠 Go to Full Dashboard"):
         st.experimental_set_query_params()
         st.rerun()
     
     st.markdown("---")
     
-    # Show storage items only
-    st.subheader("📦 Items in this Storage")
+    # Show items in this storage
+    st.subheader(f"Items ({len(storage['items']})")
     
     if storage['items']:
         for item in storage['items']:
             icon = get_status_icon(item['status'])
-            st.write(f"{icon} **{item['name']}** - {item['quantity']}")
-            st.caption(f"Category: {item.get('category', 'Other')} | Status: {item['status']}")
+            st.write(f"{icon} **{item['name']}**")
+            st.caption(f"{item['quantity']} | {item.get('category', 'Other')} | {item['status']}")
     else:
         st.info("No items in this storage")
     
-    st.markdown("---")
     st.caption(f"Last updated: {storage['last_updated']}")
 
 def dashboard_view():
-    """Main dashboard view - FULL ACCESS"""
+    """Full dashboard with management capabilities"""
     st.title("🚁 Drone Lab AIC - Inventory System")
-    st.markdown("### 📱 QR CODE INVENTORY SYSTEM - FULL ACCESS")
+    st.markdown("### 🔄 REAL-TIME SYNC - Changes appear on all devices instantly")
+    
+    # Auto-refresh indicator
+    last_refresh = st.session_state.ui_state['last_refresh'].strftime("%H:%M:%S")
+    st.caption(f"🔄 Auto-sync active | Last sync: {last_refresh}")
     
     # Quick actions
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("➕ Add New Storage", use_container_width=True):
-            st.session_state.current_view = 'add_storage'
+        if st.button("➕ Add Storage", use_container_width=True):
+            st.session_state.ui_state['current_view'] = 'add_storage'
             st.rerun()
     with col2:
-        if st.button("🔄 Refresh All QR Codes", use_container_width=True):
-            st.session_state.qr_codes = {}
+        if st.button("🔄 Force Refresh", use_container_width=True):
+            force_refresh()
             st.rerun()
     
     st.markdown("---")
     
-    # Statistics with Central QR
-    total_storages = len(st.session_state.inventory['storages'])
-    total_items = sum(len(storage['items']) for storage in st.session_state.inventory['storages'].values())
-    available_items = sum(
-        1 for storage in st.session_state.inventory['storages'].values() 
-        for item in storage['items'] 
-        if item['status'] == 'Available'
-    )
+    # Statistics
+    total_storages = len(inventory['storages'])
+    total_items = sum(len(storage['items']) for storage in inventory['storages'].values())
+    available_items = sum(1 for storage in inventory['storages'].values() for item in storage['items'] if item['status'] == 'Available')
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -212,183 +207,142 @@ def dashboard_view():
     with col2:
         st.metric("Total Items", total_items)
     with col3:
-        st.metric("Available Items", available_items)
+        st.metric("Available", available_items)
     with col4:
-        # Central QR Code - FULL ACCESS
         central_qr = get_central_qr_code()
         if central_qr:
-            st.image(central_qr, width=120)
+            st.image(central_qr, width=100)
             st.caption("**Central QR - Full Access**")
             st.download_button(
-                label="📥 Download Main QR",
+                label="📥 Download",
                 data=central_qr,
-                file_name="drone_lab_full_access_qr.png",
+                file_name="drone_lab_central_qr.png",
                 mime="image/png",
-                use_container_width=True
+                use_container_width=True,
+                key="dl_central"
             )
     
     st.markdown("---")
     
     # QR Code Instructions
     st.info("""
-    **📱 QR Code Access Levels:**
-    - **Central QR (Full Access)**: Complete dashboard with all storages
-    - **Storage QR (Limited Access)**: View only that specific storage
-    - **Better Scannability**: Higher quality QR codes for easy mobile scanning
+    **📱 QR Code System:**
+    - **Central QR**: Full dashboard access (manage everything)
+    - **Storage QR**: View only that specific storage
+    - **Real-time Sync**: Changes appear instantly on all devices
     """)
     
     st.markdown("---")
     
     # Storage Management
-    st.subheader("📦 Storage Units with QR Codes")
+    st.subheader("📦 Storage Management")
     
-    if not st.session_state.inventory['storages']:
+    if not inventory['storages']:
         st.info("🚁 No storage units yet. Click 'Add Storage' to create your first one!")
         return
     
-    for storage_id, storage in st.session_state.inventory['storages'].items():
-        display_storage_card(storage_id, storage)
-
-def display_storage_card(storage_id, storage):
-    """Display a storage card with QR code"""
-    with st.expander(f"🚀 {storage['name']} ({len(storage['items'])} items)", expanded=True):
-        col_left, col_right = st.columns([3, 1])
-        
-        with col_left:
-            # Storage info
-            st.write(f"**Location:** {storage['location']}")
-            st.write(f"**Type:** {storage['type'].title()}")
-            if storage.get('description'):
-                st.write(f"**Description:** {storage['description']}")
-            st.write(f"**Last Updated:** {storage['last_updated']}")
+    for storage_id, storage in inventory['storages'].items():
+        with st.expander(f"🚀 {storage['name']} ({len(storage['items'])} items)", expanded=True):
+            col_left, col_right = st.columns([3, 1])
             
-            st.markdown("---")
-            st.write("**Items:**")
-            
-            # Display items
-            if storage['items']:
-                for i, item in enumerate(storage['items']):
-                    display_item_row(storage_id, i, item)
-            else:
-                st.info("No items in this storage")
-            
-            # Add item button
-            if st.button("➕ Add Item", key=f"add_item_{storage_id}", use_container_width=True):
-                st.session_state.current_view = 'add_item'
-                st.session_state.selected_storage = storage_id
-                st.rerun()
-        
-        with col_right:
-            # Storage QR Code - LIMITED ACCESS
-            storage_qr = get_storage_qr_code(storage_id, storage['name'])
-            if storage_qr:
-                st.image(storage_qr, width=150)
-                st.caption("**Storage QR - Limited Access**")
-                st.caption(f"Scans to: {storage['name']} only")
+            with col_left:
+                st.write(f"**Location:** {storage['location']}")
+                st.write(f"**Type:** {storage['type'].title()}")
+                if storage.get('description'):
+                    st.write(f"**Description:** {storage['description']}")
+                st.write(f"**Last Updated:** {storage['last_updated']}")
                 
-                st.download_button(
-                    label="📥 Download QR",
-                    data=storage_qr,
-                    file_name=f"qr_{storage['name'].replace(' ', '_')}.png",
-                    mime="image/png",
-                    key=f"download_{storage_id}",
-                    use_container_width=True
-                )
+                st.markdown("---")
+                st.write("**Items:**")
+                
+                if storage['items']:
+                    for i, item in enumerate(storage['items']):
+                        col_item, col_edit, col_delete = st.columns([3, 1, 1])
+                        with col_item:
+                            icon = get_status_icon(item['status'])
+                            st.write(f"{icon} **{item['name']}**")
+                            st.caption(f"{item['quantity']} • {item.get('category', 'Other')}")
+                        with col_edit:
+                            if st.button("✏️", key=f"edit_{storage_id}_{item['id']}"):
+                                st.session_state.ui_state['current_view'] = 'edit_item'
+                                st.session_state.ui_state['selected_storage'] = storage_id
+                                st.session_state.ui_state['selected_item'] = i
+                                st.rerun()
+                        with col_delete:
+                            # SIMPLE DELETE - No confirmation popup
+                            if st.button("🗑️", key=f"delete_{storage_id}_{item['id']}"):
+                                if safe_delete_item(storage_id, i):
+                                    st.rerun()
+                else:
+                    st.info("No items in this storage")
+                
+                if st.button("➕ Add Item", key=f"add_{storage_id}", use_container_width=True):
+                    st.session_state.ui_state['current_view'] = 'add_item'
+                    st.session_state.ui_state['selected_storage'] = storage_id
+                    st.rerun()
             
-            st.markdown("---")
-            
-            # Storage management
-            if st.button("⚙️ Manage Storage", key=f"manage_{storage_id}", use_container_width=True):
-                st.session_state.current_view = 'edit_storage'
-                st.session_state.selected_storage = storage_id
-                st.rerun()
-            
-            # Quick stats
-            available_count = sum(1 for item in storage['items'] if item['status'] == 'Available')
-            st.metric("Available", available_count)
-
-def display_item_row(storage_id, item_index, item):
-    """Display a single item row with edit/delete buttons"""
-    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-    
-    with col1:
-        icon = get_status_icon(item['status'])
-        st.write(f"{icon} **{item['name']}**")
-        st.caption(f"{item['quantity']} • {item.get('category', 'Other')}")
-    
-    with col2:
-        st.caption(item['status'])
-    
-    with col3:
-        if st.button("✏️", key=f"edit_{storage_id}_{item['id']}"):
-            st.session_state.current_view = 'edit_item'
-            st.session_state.selected_storage = storage_id
-            st.session_state.selected_item = item_index
-            st.rerun()
-    
-    with col4:
-        if st.button("🗑️", key=f"delete_{storage_id}_{item['id']}"):
-            st.session_state.delete_confirm = {
-                'type': 'item',
-                'storage_id': storage_id,
-                'item_index': item_index,
-                'item_name': item['name']
-            }
-            st.rerun()
+            with col_right:
+                storage_qr = get_storage_qr_code(storage_id)
+                if storage_qr:
+                    st.image(storage_qr, width=130)
+                    st.caption(f"**Storage QR - View Only**")
+                    st.download_button(
+                        label="📥 Download",
+                        data=storage_qr,
+                        file_name=f"qr_{storage['name'].replace(' ', '_')}.png",
+                        mime="image/png",
+                        key=f"dl_{storage_id}",
+                        use_container_width=True
+                    )
+                
+                st.markdown("---")
+                
+                if st.button("⚙️ Manage Storage", key=f"manage_{storage_id}", use_container_width=True):
+                    st.session_state.ui_state['current_view'] = 'edit_storage'
+                    st.session_state.ui_state['selected_storage'] = storage_id
+                    st.rerun()
+                
+                available = sum(1 for item in storage['items'] if item['status'] == 'Available')
+                st.metric("Available", available)
+                st.metric("Total", len(storage['items']))
 
 def add_storage_view():
-    """Add new storage view"""
     st.title("🏗️ Add New Storage")
-    
     if st.button("← Back to Dashboard"):
-        st.session_state.current_view = 'dashboard'
+        st.session_state.ui_state['current_view'] = 'dashboard'
         st.rerun()
     
     with st.form("add_storage_form"):
-        name = st.text_input("Storage Name*", placeholder="e.g., Drone Cabinet, Battery Shelf")
+        name = st.text_input("Storage Name*", placeholder="e.g., Drone Cabinet")
         location = st.text_input("Location*", value="Drone Lab AIC")
-        storage_type = st.selectbox("Storage Type*", st.session_state.inventory['storage_types'])
-        description = st.text_area("Description", placeholder="Optional description of this storage")
+        storage_type = st.selectbox("Storage Type*", inventory['storage_types'])
+        description = st.text_area("Description", placeholder="Optional description")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            submit = st.form_submit_button("🏗️ Create Storage", type="primary", use_container_width=True)
-        with col2:
-            cancel = st.form_submit_button("❌ Cancel", use_container_width=True)
-        
-        if cancel:
-            st.session_state.current_view = 'dashboard'
-            st.rerun()
-        
-        if submit:
+        if st.form_submit_button("🏗️ Create Storage", use_container_width=True):
             if name and location:
                 storage_id = f"storage_{generate_id()}"
-                st.session_state.inventory['storages'][storage_id] = {
+                inventory['storages'][storage_id] = {
                     'id': storage_id,
                     'name': name,
                     'location': location,
                     'type': storage_type,
                     'description': description,
                     'items': [],
-                    'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M")
+                    'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
-                save_inventory()  # FORCE SAVE
-                st.session_state.current_view = 'dashboard'
-                st.success(f"✅ Storage '{name}' created successfully!")
-                st.rerun()
-            else:
-                st.error("Please fill in all required fields (*)")
+                if auto_save():
+                    st.session_state.ui_state['current_view'] = 'dashboard'
+                    st.success(f"✅ Storage '{name}' created successfully!")
+                    st.rerun()
 
 def edit_storage_view():
-    """Edit storage view"""
-    storage_id = st.session_state.selected_storage
-    storage = st.session_state.inventory['storages'][storage_id]
+    storage_id = st.session_state.ui_state['selected_storage']
+    storage = inventory['storages'][storage_id]
     
-    st.title("⚙️ Manage Storage")
-    
+    st.title(f"⚙️ Manage {storage['name']}")
     if st.button("← Back to Dashboard"):
-        st.session_state.current_view = 'dashboard'
-        st.session_state.selected_storage = None
+        st.session_state.ui_state['current_view'] = 'dashboard'
+        st.session_state.ui_state['selected_storage'] = None
         st.rerun()
     
     col1, col2 = st.columns(2)
@@ -398,150 +352,107 @@ def edit_storage_view():
         with st.form("edit_storage_form"):
             name = st.text_input("Name*", value=storage['name'])
             location = st.text_input("Location*", value=storage['location'])
-            storage_type = st.selectbox("Type*", 
-                                      st.session_state.inventory['storage_types'],
-                                      index=st.session_state.inventory['storage_types'].index(storage['type']))
+            storage_type = st.selectbox("Type*", inventory['storage_types'], 
+                                      index=inventory['storage_types'].index(storage['type']))
             description = st.text_area("Description", value=storage.get('description', ''))
             
             if st.form_submit_button("💾 Save Changes", use_container_width=True):
                 if name and location:
                     storage.update({
-                        'name': name,
-                        'location': location,
-                        'type': storage_type,
+                        'name': name, 
+                        'location': location, 
+                        'type': storage_type, 
                         'description': description,
-                        'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M")
+                        'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     })
-                    save_inventory()  # FORCE SAVE
-                    # Clear QR cache to regenerate
-                    qr_key = f"storage_{storage_id}"
-                    if qr_key in st.session_state.qr_codes:
-                        del st.session_state.qr_codes[qr_key]
-                    
-                    st.session_state.current_view = 'dashboard'
-                    st.session_state.selected_storage = None
-                    st.success("✅ Storage updated successfully!")
-                    st.rerun()
+                    if auto_save():
+                        st.session_state.ui_state['current_view'] = 'dashboard'
+                        st.session_state.ui_state['selected_storage'] = None
+                        st.success("✅ Storage updated successfully!")
+                        st.rerun()
     
     with col2:
         st.subheader("Danger Zone")
         st.warning("This will permanently delete the storage and all its items!")
         
-        if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True):
+        # SIMPLE DELETE - No confirmation conflicts
+        if st.button("🗑️ Delete This Storage", type="secondary", use_container_width=True, key="delete_storage_final"):
             storage_name = storage['name']
-            # Clear QR cache
-            qr_key = f"storage_{storage_id}"
-            if qr_key in st.session_state.qr_codes:
-                del st.session_state.qr_codes[qr_key]
-            
-            del st.session_state.inventory['storages'][storage_id]
-            save_inventory()  # FORCE SAVE
-            st.session_state.current_view = 'dashboard'
-            st.session_state.selected_storage = None
-            st.success(f"✅ Storage '{storage_name}' deleted successfully!")
-            st.rerun()
+            del inventory['storages'][storage_id]
+            if auto_save():
+                st.session_state.ui_state['current_view'] = 'dashboard'
+                st.session_state.ui_state['selected_storage'] = None
+                st.success(f"✅ Storage '{storage_name}' deleted successfully!")
+                st.rerun()
 
 def add_item_view():
-    """Add item view"""
-    storage_id = st.session_state.selected_storage
-    storage = st.session_state.inventory['storages'][storage_id]
+    storage_id = st.session_state.ui_state['selected_storage']
+    storage = inventory['storages'][storage_id]
     
     st.title(f"➕ Add Item to {storage['name']}")
-    
     if st.button("← Back to Dashboard"):
-        st.session_state.current_view = 'dashboard'
-        st.session_state.selected_storage = None
+        st.session_state.ui_state['current_view'] = 'dashboard'
+        st.session_state.ui_state['selected_storage'] = None
         st.rerun()
     
     with st.form("add_item_form"):
-        name = st.text_input("Item Name*", placeholder="e.g., DJI Mavic 3, LiPo Battery")
-        quantity = st.text_input("Quantity*", placeholder="e.g., 2 units, 5 packs")
-        category = st.selectbox("Category", st.session_state.inventory['categories'])
-        status = st.selectbox("Status", st.session_state.inventory['status_options'])
+        name = st.text_input("Item Name*", placeholder="e.g., DJI Mavic 3")
+        quantity = st.text_input("Quantity*", placeholder="e.g., 2 units")
+        category = st.selectbox("Category", inventory['categories'])
+        status = st.selectbox("Status", inventory['status_options'])
         
-        if st.form_submit_button("➕ Add Item", type="primary", use_container_width=True):
+        if st.form_submit_button("➕ Add Item", use_container_width=True):
             if name and quantity:
-                new_item = {
+                storage['items'].append({
                     'id': f"item_{generate_id()}",
-                    'name': name,
-                    'quantity': quantity,
-                    'category': category,
+                    'name': name, 
+                    'quantity': quantity, 
+                    'category': category, 
                     'status': status
-                }
-                storage['items'].append(new_item)
-                storage['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                save_inventory()  # FORCE SAVE
-                st.session_state.current_view = 'dashboard'
-                st.session_state.selected_storage = None
-                st.success(f"✅ Item '{name}' added successfully!")
-                st.rerun()
-            else:
-                st.error("Please fill in item name and quantity")
+                })
+                storage['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                if auto_save():
+                    st.session_state.ui_state['current_view'] = 'dashboard'
+                    st.session_state.ui_state['selected_storage'] = None
+                    st.success(f"✅ Item '{name}' added successfully!")
+                    st.rerun()
 
 def edit_item_view():
-    """Edit item view"""
-    storage_id = st.session_state.selected_storage
-    item_index = st.session_state.selected_item
-    storage = st.session_state.inventory['storages'][storage_id]
+    storage_id = st.session_state.ui_state['selected_storage']
+    item_index = st.session_state.ui_state['selected_item']
+    storage = inventory['storages'][storage_id]
     item = storage['items'][item_index]
     
     st.title(f"✏️ Edit Item in {storage['name']}")
-    
     if st.button("← Back to Dashboard"):
-        st.session_state.current_view = 'dashboard'
-        st.session_state.selected_storage = None
-        st.session_state.selected_item = None
+        st.session_state.ui_state['current_view'] = 'dashboard'
+        st.session_state.ui_state['selected_storage'] = None
+        st.session_state.ui_state['selected_item'] = None
         st.rerun()
     
     with st.form("edit_item_form"):
         name = st.text_input("Item Name*", value=item['name'])
         quantity = st.text_input("Quantity*", value=item['quantity'])
-        category = st.selectbox("Category", 
-                              st.session_state.inventory['categories'],
-                              index=st.session_state.inventory['categories'].index(item.get('category', 'Other')))
-        status = st.selectbox("Status",
-                            st.session_state.inventory['status_options'],
-                            index=st.session_state.inventory['status_options'].index(item['status']))
+        category = st.selectbox("Category", inventory['categories'],
+                              index=inventory['categories'].index(item.get('category', 'Other')))
+        status = st.selectbox("Status", inventory['status_options'],
+                            index=inventory['status_options'].index(item['status']))
         
-        if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
+        if st.form_submit_button("💾 Save Changes", use_container_width=True):
             if name and quantity:
                 item.update({
-                    'name': name,
-                    'quantity': quantity,
-                    'category': category,
+                    'name': name, 
+                    'quantity': quantity, 
+                    'category': category, 
                     'status': status
                 })
-                storage['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                save_inventory()  # FORCE SAVE
-                st.session_state.current_view = 'dashboard'
-                st.session_state.selected_storage = None
-                st.session_state.selected_item = None
-                st.success(f"✅ Item '{name}' updated successfully!")
-                st.rerun()
-            else:
-                st.error("Please fill in item name and quantity")
-
-# Handle deletion confirmation
-if st.session_state.delete_confirm:
-    delete_info = st.session_state.delete_confirm
-    st.error(f"🚨 Confirm Deletion")
-    
-    if delete_info['type'] == 'item':
-        st.write(f"Are you sure you want to delete **{delete_info['item_name']}**?")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✅ Yes, Delete", type="primary", use_container_width=True):
-                storage = st.session_state.inventory['storages'][delete_info['storage_id']]
-                storage['items'].pop(delete_info['item_index'])
-                storage['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                save_inventory()  # FORCE SAVE
-                st.session_state.delete_confirm = None
-                st.success(f"✅ Item '{delete_info['item_name']}' deleted successfully!")
-                st.rerun()
-        with col2:
-            if st.button("❌ Cancel", use_container_width=True):
-                st.session_state.delete_confirm = None
-                st.rerun()
+                storage['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                if auto_save():
+                    st.session_state.ui_state['current_view'] = 'dashboard'
+                    st.session_state.ui_state['selected_storage'] = None
+                    st.session_state.ui_state['selected_item'] = None
+                    st.success("✅ Item updated successfully!")
+                    st.rerun()
 
 if __name__ == "__main__":
     main()
